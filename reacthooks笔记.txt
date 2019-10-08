@@ -1,0 +1,7 @@
+一.react类声明组件的缺点
+  难以复用的状态逻辑
+  难以捉摸的声明周期
+  混乱的副作用
+二、react的安装
+    除了react和react-dom之外，其他模块都封装在react-script中了
+    可以使用npm run eject解构编译脚本
