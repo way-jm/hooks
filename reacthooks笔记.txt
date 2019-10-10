@@ -2,6 +2,317 @@
   难以复用的状态逻辑
   难以捉摸的声明周期
   混乱的副作用
+  this指向困扰：内联函数会创建新的句柄，导致组件重新渲染，不保证this的指向。
 二、react的安装
     除了react和react-dom之外，其他模块都封装在react-script中了
-    可以使用npm run eject解构编译脚本
+    可以使用npm run eject解构编译脚本,使用前要git add . 保存代码。
+
+三、react最新特性简介及context的使用
+    3.1 Context--->会向上查找。
+       定义:提供了一种方法，能够让数据跨层级传递，并且变化是响应式的
+       派生出两个:Provider 和 consumer
+
+       如何创建context：
+          const ThemeContext = React.createContext('light');  // 在Consumer找不到provider就会取这个值。
+
+        import React,{Component,createContext} from 'react';
+        import './App.css';
+
+        const BatteryContext = createContext('light');
+
+        // 子组件可以接受一个context参数
+        class Leaf extends Component {
+          render() {
+            return (
+                <div>
+                  <BatteryContext.Consumer>
+                    {(context)=>context}
+                  </BatteryContext.Consumer>
+                </div>
+            );
+          }
+        }
+
+        // 中间组件，为了营造多层级
+        class Middle extends Component {
+          render() {
+            return <Leaf/>;
+          }
+        }
+
+        // 父级组件
+        function App() {
+          return (
+            <div className="App">
+              <BatteryContext.Provider  value={60}>
+                <Middle/>
+              </BatteryContext.Provider >
+            </div>
+          );
+        }
+
+        export default App;
+
+        如果有多个要传递的值，只需要多创建一个createContext，然后嵌套使用就行了。
+        <BatteryContext.Provider  value={60}>
+        <BatteryContext2.Provider  value={80}>
+
+                        <Middle/>
+         </BatteryContext2.Provider >
+         </BatteryContext.Provider >
+
+         使用
+                 <BatteryContext.Consumer>
+                    {(context)=><BatteryContext2.Consumer>{value2=>value2}</BatteryContext2.Consumer>}
+                  </BatteryContext.Consumer>
+
+
+         使用contextType美化我们写法
+          static contextType = BatteryContext;  //指定 contextType 读取当前的context。
+           render() {
+             return (
+                 <div>
+                     {this.context}
+                 </div>
+             );
+           }
+     *Tips:上面的写法是写在一个文件中的，如果父子组件不在一个文件中，要共享context，就要把createContext的方法抽离出来。、
+     父组件
+       import React,{useState} from 'react';
+       import Bar from './Bar'
+       import {CountContext} from './util'
+       import './App.css';
+       function App(props) {
+           const [count, setCount] = useState(0);
+           return (
+               <div>
+                   <CountContext.Provider value={count}>
+                   <p>You clicked {count} times</p>
+                   <button onClick={() => setCount(count + 1)}>
+                       Click me
+                   </button>
+                       <Bar value={count}/>
+                   </CountContext.Provider>
+               </div>
+           );
+       }
+
+       export  default  App;
+     子组件:
+    import { CountContext } from '@/utils/context';
+
+    const getProviderValue=()=>{
+      return <CountContext.Consumer>{value=><span>{value}</span>}</CountContext.Consumer>
+    }
+
+    const Child=props=>{
+    return (
+        getProviderValue()
+      );
+    }
+
+    3.2 Lazy与Suspense实现延迟加载
+    import React,{lazy,Suspense}from 'react';
+    import './App.css';
+
+    const About =lazy(()=>import(/*webpackChunkName:"about"*/'./About.js'));  //webpack允许我们自定义包名。
+
+    function App() {
+      return (
+        <div className="App">
+            <Suspense fallback={<div>loading</div>}>
+              <About/>
+            </Suspense>
+        </div>
+      );
+    }
+
+    export default App;
+
+    错误边界：捕获加载错误
+    加载错误时会触发componentDidCatch生命周期函数，在这里面我们可以进行一些操作。
+
+    更简便的是
+    state = { hasError: false };
+    static getDerivedStateFromError(error) {
+        // 更新 state 使下一次渲染能够显示降级后的 UI
+        return { hasError: true };
+      }
+
+        render() {
+          if (this.state.hasError) {
+            // 你可以自定义降级后的 UI 并渲染
+            return <h1>Something went wrong.</h1>;
+          }
+
+          return this.props.children;
+        }
+      }
+
+    3.3 PureComponent和memo
+      使用PureComponent需要注意的是
+       a.Pure只会浅层比较，如果第一层没有发生变化，而里面发生变化了，可能引起视图不更新的bug。
+       b.渲染子组件的绑定一个内联函数的时候，每次都会渲染(因为子组件每次相当于都传了一个新new的方法)，我们要把这个方法变成属性，来解决这个问题。
+
+      使用memo是pureComponent一样
+      import React,{Component,memo} from 'react';
+      import './App.css';
+
+      //包裹组件，count更新时触发render，age更新的时候无法更新
+      const Foo=memo(function Foo(props){
+          console.log('render....')
+          return <div>{props.conunt}</div>
+      });
+
+      class App extends Component{
+          state={
+              conunt:1,
+              person:{
+                  age:10
+              }
+          };
+          render() {
+              let {person,conunt} = this.state;
+              conunt++;
+              return (
+                  <div className="App">
+                      <button onClick={
+                          ()=>this.setState({conunt:conunt})
+                      }>click</button>
+                      <Foo person={person} conunt={conunt}/>
+                  </div>
+              );
+          }
+      }
+
+      export default App;
+
+     如果要深入比较，要传入第二个参数：一个比较函数
+    function areEqual(prevProps, nextProps) {
+      /*
+      如果把 nextProps 传入 render 方法的返回结果与
+      将 prevProps 传入 render 方法的返回结果一致则返回 true，
+      否则返回 false
+      */
+    }
+    export default React.memo(MyComponent, areEqual)
+
+四.Hooks
+   定义：不编写 class 的情况下使用 state 以及其他的 React 特性
+
+  4.1 state Hooks
+   function App() {
+       // 声明一个新的叫做 “count” 的 state 变量
+       const [count, setCount] = useState(0);   // 返回两个参数，第一是这个变量，第二个是设置这个变量的函数。
+
+       return (
+           <div>
+               <p>You clicked {count} times</p>
+               <button onClick={() => setCount(count + 1)}>
+                   Click me
+               </button>
+           </div>
+       );
+   }
+
+   几个原则:
+    1.useState可以有多个
+    const [age, setAge] = useState(42);
+    const [fruit, setFruit] = useState('banana');
+    2.每次渲染的时候，必须是相同的数量相同的个数，不然react会报错
+    为了规范我们的书写，可以用eslint-plugin-react-hooks来规范(安装后如果报错，运行npm i 或者再npm add @babel/runtime)
+    参考:https://react-1251415695.cos-website.ap-chengdu.myqcloud.com/docs/hooks-rules.html
+    3.useState允许我们传入一个函数，用于state的延迟初始化，这个函数只会执行一次。
+      如果你的初始化逻辑很复杂，这是一个不错的优化方法。
+          const [count, setCount] = useState(()=>{
+              console.log('init');  // 这个箭头函数只会执行一次，就是在App初始化的时候。
+              return props.defaultCount||0
+          });
+          return (
+              <div>
+                  <p>You clicked {count} times</p>
+                  <button onClick={() => setCount(count + 1)}>
+                      Click me
+                  </button>
+              </div>
+          );
+
+
+    4.2 useEffect
+    告诉 React 组件需要在渲染后执行某些操作。React 会保存你传递的函数（我们将它称之为 “effect”），并且在执行 DOM 更新之后调用它。
+
+    //与 componentDidMount 或 componentDidUpdate 不同，使用 useEffect 调度的 effect 不会阻塞浏览器更新屏幕，这让你的应用看起来响应更快。
+    //大多数情况下，effect 不需要同步地执行。在个别情况下（例如测量布局），有单独的 useLayoutEffect Hook 供你使用，其 API 与 useEffect 相同。
+
+      1.不需需要清除的副作用(Effect)
+      // 就像 componentDidMount and componentDidUpdate:
+              useEffect(() => {
+                document.title = `You clicked ${count} times`;
+              });
+
+      2.需要清除的副作用：
+      原理: 每个 effect 都可以返回一个清除函数
+            React 会在执行当前 effect 之前对上一个 effect 进行清除。
+
+            所以如果这个effect仅仅是在组件渲染的时候调用一次，那么也只会在组件销毁时执行清除操作(执行回调函数），相当于componentWillUnmount。
+            当然effect的可以多次调用，执行当前 effect 之前对上一个 effect 进行清除。
+
+        useEffect(() => {
+          function handleStatusChange(status) {
+            setIsOnline(status.isOnline);
+          }
+
+          ChatAPI.subscribeToFriendStatus(props.friend.id, handleStatusChange);
+          // Specify how to clean up after this effect:
+          return function cleanup() {
+            ChatAPI.unsubscribeFromFriendStatus(props.friend.id, handleStatusChange);
+          };
+        });
+
+        3.使用多个Effect实现关注点分离
+        useEffect(() => {
+            document.title = `You clicked ${count} times`;
+          });
+        useEffect(() => {
+            ChatAPI.subscribeToFriendStatus(props.friend.id, handleStatusChange);
+          });
+
+        4.通过跳过 Effect 进行性能优化
+        useEffect(() => {
+          document.title = `You clicked ${count} times`;
+        }, [count]); // 仅在 count 更改时更新
+        *Tips:
+           当数组内的所有元素都不发生变化，useEffect才不会重新执行，否则都会重新执行
+           如果不传第二个参数，每次都会执行。
+
+    4.3 useContext --->关于父子组件的拆分，可以看上面的context部分
+
+    import React,{useState,useContext,createContext} from 'react';
+    import './App.css';
+
+    const CountContext = createContext(0);
+
+    function Bar(){
+        const count = useContext(CountContext);
+        return (
+            <div>{count}</div>
+        )
+    }
+    function App(props) {
+
+        const [count, setCount] = useState(0);
+        return (
+            <div>
+                <CountContext.Provider value={count}>
+                <p>You clicked {count} times</p>
+                <button onClick={() => setCount(count + 1)}>
+                    Click me
+                </button>
+                    <Bar/>
+                </CountContext.Provider>
+            </div>
+        );
+    }
+
+    export  default  App;
+
