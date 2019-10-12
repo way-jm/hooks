@@ -316,3 +316,246 @@
 
     export  default  App;
 
+    4.4 useMemo和useCallback
+    useMemo定义一段函数是否需要重复执行（仅仅用来做性能优化，不应该改变代码逻辑）
+    与useEffect的区别：
+      相同:执行策略和useEffect相同
+      useEffect是执行副作用的，是在渲染之后执行的。
+      useMemo是在渲染时候执行的，参与渲染。
+
+      function App() {
+          const [count, setCount] = useState(0);
+          const double =useMemo(()=>{
+              return count*2
+          },[count===3]);  // 返回的是一个布尔值，在等于3之前一直是false，不会重新计算，=3变成true重新计算，>3变成false，重新计算，之后一直是false，不重新计算了。
+          return (
+              <div>
+                  <p>You clicked {count} times</p>
+                  <h1> {double}</h1>
+                  <Counter count={count}/>
+                  <button onClick={() => setCount(count + 1)}>
+                      Click me
+                  </button>
+              </div>
+          );
+      }
+
+    优化传入子组件的函数句柄
+    mport React,{useState,useMemo,memo} from 'react';
+    import './App.css';
+
+    const Counter = memo(function Counter(props){
+        console.log('counter render..');   // 即使double没有变化，也会答应，因为传入的onclick每次都是传入新的一个句柄
+        return (
+            <h1 onClick={props.onClick}>{props.count}</h1>
+        )
+    });
+    function App() {
+        const [count, setCount] = useState(0);
+        const double =useMemo(()=>{
+            return count*2
+        },[count===3]);
+
+        const onClick=()=>{
+            console.log('click')
+        };
+        return (
+            <div>
+                <p>You clicked {count} times</p>
+                <Counter count={double} onClick={onClick}/>
+                <button onClick={() => setCount(count + 1)}>
+                    Click me
+                </button>
+            </div>
+        );
+    }
+
+     ===>修改
+     import React,{useState,useMemo,memo} from 'react';
+     import './App.css';
+
+     const Counter = memo(function Counter(props){
+         console.log('counter render..');
+         return (
+             <h1 onClick={props.onClick}>{props.count}</h1>
+         )
+     });
+     function App() {
+         const [count, setCount] = useState(0);
+         const double =useMemo(()=>{
+             return count*2
+         },[count===3]);
+
+         const onClick=useMemo(()=>{
+             return ()=>{
+                 console.log('click')
+             }
+         },[]);  // 由于传入的是一个空数组，这里只会执行一次
+
+         // **useCallback是useMemo的变种
+          const onClick=useCallback(()=>{
+                     console.log('click')
+             },[]);  // 一般不是空数组，一般是有依赖的。
+         return (
+             <div>
+                 <p>You clicked {count} times</p>
+                 <Counter count={double} onClick={onClick}/>
+                 <button onClick={() => setCount(count + 1)}>
+                     Click me
+                 </button>
+             </div>
+         );
+     }
+
+     export  default  App;
+
+     **Tips，在useMemo的策略中不需要加入setState的函数，因为react可以保证每次返回的setState函数都是同样一个句柄。
+     setCount可以获取当前的值 setCount((count)=>count+1)
+
+
+   4.5 useRef
+   两种使用场景:
+     1.获取dom元素
+     2.保存可变值
+
+    获取dom元素的值
+    父组件中
+     const countRef = useRef();
+    const onClick = useCallback(() => {
+            console.log(countRef.current)
+            countRef.current.speak() // 获取子组件的成员方法。
+        }, [countRef]);
+     <Counter count={double} onClick={onClick} ref={countRef}/>
+
+   子组件中：只有类组件才能实例化
+   class Counter extends PureComponent {
+      speak(){
+           console.log('son is speak')
+       }
+       render() {
+           const {props} = this;
+           return (
+               <h1 onClick={props.onClick}>{props.count}</h1>
+           )
+       }
+   }
+
+   第二种使用场景：
+   let it；
+     useEffect(()=>{
+           it = setInterval(()=>{
+               setCount((count)=>count+1)
+           },1000)
+       },[]);
+
+       useEffect(()=>{
+           if(count>10){
+               clearInterval(it);
+           }
+       });
+     这种情况下，当count>10的时候，并不会停止更新。因为每次组件重新渲染都会重新产生一个it
+
+     改造：
+ const it = useRef();
+    useEffect(()=>{
+         it.current = setInterval(()=>{
+             setCount((count)=>count+1)
+         },1000)
+     },[]);
+
+     useEffect(()=>{
+         if(count>=10){
+             clearInterval(it.current);
+         }
+     });
+
+   4.6 自定义hook，
+   在自定义hook函数内部，仍然可以使用内置hook函数，相当于把这一部分代码抽离出来，方便复用。
+   // 自定义的hook，以use开头命名
+   function useCounter(defaultCounter){
+       const [count, setCount] = useState(defaultCounter);
+       const it = useRef();
+
+       useEffect(()=>{
+           it.current = setInterval(()=>{
+               setCount((count)=>count+1)
+           },1000)
+       },[]);
+
+       useEffect(()=>{
+           if(count>=10){
+               clearInterval(it.current);
+           }
+       });
+
+       return [count,setCount]
+   }
+
+   function App(props) {
+       const [count, setCount] = useCounter(0);
+       return (
+           <div>
+               <p>You clicked {count} times</p>
+               <Counter count={count} />
+               <button onClick={() => setCount(count + 1)}>
+                   Click me
+               </button>
+           </div>
+       );
+   }
+
+   自定义hook和函数组件很相似，除了输入输出，几乎无法区别自定义hook和函数组件。
+
+   4.7 hook规则
+     -只在最顶层使用hook
+     -只在react函数中调用hook(函数组件和自定义hook函数)
+
+
+   4.8 hook常用技巧
+   https://react-1251415695.cos-website.ap-chengdu.myqcloud.com/docs/hooks-faq.html
+
+   生命周期方法要如何对应到 Hook？
+   constructor：函数组件不需要构造函数。你可以通过调用 useState 来初始化 state。如果计算的代价比较昂贵，你可以传一个函数给 useState。
+   getDerivedStateFromProps：改为 在渲染时 安排一次更新 setCount。
+   shouldComponentUpdate：详见 下方 React.memo.
+   render：这是函数组件体本身。
+   componentDidMount, componentDidUpdate, componentWillUnmount：useEffect Hook 可以表达所有这些(包括 不那么 常见 的场景)的组合。
+   componentDidCatch and getDerivedStateFromError：目前还没有这些方法的 Hook 等价写法，但很快会加上。
+
+   有类似实例变量的东西吗？ 使用useRef你可以在 useEffect 内部对其进行写入:
+ function Timer() {
+   const intervalRef = useRef();
+   useEffect(() => {
+    const id = setInterval(() => {
+      // ...
+    });
+    intervalRef.current = id;
+    return () => {
+      clearInterval(intervalRef.current);
+    };
+  });
+
+  // ...
+}
+
+   如何获取上一轮的 props 或 state？
+   function Counter() {
+     const [count, setCount] = useState(0);
+
+     const prevCountRef = useRef();
+     useEffect(() => {
+       prevCountRef.current = count;
+     });
+     const prevCount = prevCountRef.current;
+
+     return <h1>Now: {count}, before: {prevCount}</h1>;
+   }
+
+五.
+
+
+
+
+
+
+
