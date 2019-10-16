@@ -551,7 +551,150 @@
      return <h1>Now: {count}, before: {prevCount}</h1>;
    }
 
-五.
+五.redux
+  5.1 如何推到出redux的api
+  以todolist的demo为例：
+    -->我们有add，set，del，toggle操作
+    -->这些操作都是通过setState来改变state的值，让我们的操作变得无法追踪
+    -->我们通过构建一个集中处理函数dispatch函数来处理我们的操作，传入{type:'add',payload:payload}  payload 是需要用的数据
+        现在调用 dispatch(action)
+    -->{type:'add',payload:payload}-->这样的叫做一个action
+    -->我们每次调用的时候，都需要手动创建一个action，所以我们需要创建一个actionCreator函数来帮我们创建action
+      creatAdd({payload:payload})
+      现在调用 dispatch(creatAdd)
+    -->这时候我们希望进行一层封装，比如函数addTodo 来实现  dispatch(creatAdd)的逻辑，
+       我们来传入
+       {
+          addTodo:createAdd,
+          removeTodo:createRemove
+       }
+       然后通过bindActionCreator来批量转化--->返回的是个对象，value是一个函数
+       我们传入子组件的就不是dispatch(creatAdd) 而是
+       {
+          ...bindActionCreator({
+                               addTodo:createAdd,
+                               removeTodo:createRemove
+                   },dispatch)
+       }
+
+    -->当我们的state变得复杂，就需要从数据字段的维度来考虑数据的更新。比如一次set，可能不止set todos，还可能set其他值。
+       我们创建一个reducer函数
+       reducer(state,action)  ==>返回一个经过action处理后的新的state
+       然后：设置新的值。
+       const newState= reducer(state,action)
+       for(let key in newState){
+         setters[key](newState(key))   // setters[key]是一个对应的setState函数
+       }
+    --->我们需要拆分reducers为多个reducer函数
+      const reducers  ={
+         todos(state,action){},
+         increment(state,action){}
+      }
+      然后定义一个combineReducers()
+
+    --->我们要给action提供一个能力，异步处理
+    所以我们要求action不单可以返回一个对象，还可以返回一个函数
+    这个函数执行dispatch，
+    但是由于异步产生一个问题，因为我们获取到state是之前传进来的旧的state----》在外层创建一个store，每次state变化，都同步到store，然后我们使用store就行了。
+
+六：PWA
+   6.1 service work
+   我们新建一个项目，启动一个本地服务器 npm i  serve，然后运行serve就行了
+   index.html
+   <html>
+     <body>
+     222
+       <script>
+         navigator.serviceWorker.register('./sw.js',{scope:'/'})
+                 .then(registration =>{
+                   console.log(registration)
+                 },error=>{
+                   console.error(error)
+                 })
+       </script>
+     </body>
+   </html>
+
+   sw.js
+   // 在service work的上下文中不可以使用dom，localstorage等对象
+
+   // 通过监听生命周期来进行工作的
+
+   // 只要两个sw有一丝丝不同，新的版本会被下载安装，但不会立刻生效
+   self.addEventListener('install',event=>{
+       console.log('install',event);
+       // waitUntil 用于延迟activate的执行。
+       // event.waitUntil(new Promise(resolve => {
+       //     setTimeout(resolve,5000)
+       // }));
+       // event.waitUntil(self.skipWaiting());
+   });
+
+   self.addEventListener('activate',event=>{
+       console.log('activate',event);
+       // event.waitUntil(self.clients.claim())  // 后面会讲到
+   });
+
+   // 请求网络
+   self.addEventListener('fetch',event=>{
+       console.log('fetch',event)
+   });
+
+   *** cache Api
+   const CACHE_NAME = 'cache-v2';
+   self.addEventListener('install',event=>{
+      event.waitUntil(caches.open(CACHE_NAME).then(cache=>{
+          cache.addAll([
+              '/',
+              './index.css'
+          ])
+      }))
+   });
+
+   self.addEventListener('activate',event=>{
+       console.log('activate',event);
+       event.waitUntil(caches.keys().then(cacheNames => {
+           return Promise.all(cacheNames.map(cachName=>{
+               if(cachName!==CACHE_NAME){
+                   return caches.delete(cachName);
+               }
+           }))
+       }))
+   });
+
+   // 请求网络
+   self.addEventListener('fetch',event=>{
+       console.log('fetch',event)
+       event.respondWith(caches.open(CACHE_NAME).then(cache => {
+          return cache.match(event.request).then(response =>{
+              if(response) {
+                  return response
+              }
+
+              return fetch(event.request).then(response =>{
+                  cache.put(event.request,response.clone());
+                  return response;
+              })
+          })
+       }))
+   });
+
+   6.5 notification Api 浏览器通知。--->了解。
+
+   6.6 在项目中如何开启pwa：workbox，在create react中已经集成了。
+
+
+七：[项目篇]火车票业务架构
+   分文件夹创建4个模块，改造webpack.config.js,以期可以打包多个页面。
+   要修改的：HtmlWebpackPlugin，entry 如果报错，删除ManifestPlugin的publicPath之后的部分。
+
+
+
+
+
+
+
+
 
 
 
